@@ -17,4 +17,8 @@ To start the server and client:
 **Client**
 1. Navigate to inside the `client` directory.  
 2. `npm install` - To install the needed node packages.  
-3. `npm run dev` - To run the vite development environment.  
+3. `npm run dev` - To run the vite development environment. This will occupy your terminal.  
+
+
+### Sources
+- Steam Games database sourced from (Kaggle)[https://www.kaggle.com/datasets/fronkongames/steam-games-dataset/data?select=games.json]
