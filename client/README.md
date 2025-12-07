@@ -1,3 +1,7 @@
 # Frontend Client
 The frontend client is JavaScript w/ NPM packages.  
-This uses vite as the development enviroment, which can be used by running `npm run dev` inside the client directory.
+
+## Setup
+To set up the NPM and frontend enviroment you'll need to have NPM installed, then run:  
+1. `npm install` - To install all the required node modules.  
+2. `npm run dev` - To being the vite development enviroment.
