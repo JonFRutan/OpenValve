@@ -21,4 +21,4 @@ To start the server and client:
 
 
 ### Sources
-- Steam Games database sourced from (Kaggle)[https://www.kaggle.com/datasets/fronkongames/steam-games-dataset/data?select=games.json]
+- Steam Games database sourced from [Kaggle](https://www.kaggle.com/datasets/fronkongames/steam-games-dataset/data?select=games.json)
