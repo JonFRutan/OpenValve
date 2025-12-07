@@ -230,5 +230,23 @@ def get_games():
             cur.close()
             conn.close()
             
+@app.route('/', methods=['GET'])
+def index():
+    """Quick landing page for the API."""
+    return '''<!DOCTYPE html>
+    <html><head>
+        <title>API Service</title>
+        <style>
+                body { background: #000; color: #0f0; font-family: monospace; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; flex-direction: column; }
+        h1 { font-size: 2em; text-shadow: 0 0 10px #0f0; margin-bottom: 10px; }
+        a { color: #00f; font-size: 2em; text-shadow: 0 0 10px #00f; margin-bottom: 10px; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <h1>OpenValve Backend</h1>
+        <a href="https://github.com/JonFRutan/OpenValve">GitHub Link</a>
+    </body></html>'''
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
