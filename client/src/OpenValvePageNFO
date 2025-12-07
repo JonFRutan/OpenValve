@@ -1,0 +1,16 @@
+        {activeMenu === 'OpenValve' && (
+           <div className="tab-subwindow-container">
+             <div className="content-subwindow" style={{padding: '20px', alignItems: 'center', justifyContent: 'center'}}>
+               <div className="user-card-base" style={{width: '400px'}}>
+                  <div className="add-user-header">ABOUT OPENVALVE</div>
+                  <div style={{fontSize: '11px', lineHeight: '1.6', color: '#c8c8c8', marginTop: '10px'}}>
+                    <p>OpenValve is a Steam games database, data visualization tool, and SteamWebAPI frontend with an interface emulating the class 2000s Steam UI.</p>
+                    <p>It is developed and run by <strong>Jon Rutan</strong> and <strong>Trevor Corcoran</strong> and began as a partner project for a university database class.</p>
+                    <p>OpenValve and it's creators are not associated with Valve Corporation.</p>
+                    <p></p>
+                    <button className="add-user-btn" style={{marginTop: '20px'}} onClick={() => setActiveMenu('View')}>RETURN</button>
+                  </div>
+               </div>
+             </div>
+           </div>
+        )}
