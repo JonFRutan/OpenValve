@@ -2,6 +2,10 @@
 *Jon Rutan & Trevor Corcoran*  
 This README stinks, and MUST be updated.  
 
+NOTE: I haven't included the instructions for setting up the Steamgames database, which is a local postgresql database.  
+You'll need to run `migrate.py` against the `games.json` file from the dataset. I, being quite intelligent, pushed the local db password into this repo.  
+
+
 ## Setup
 To start the server and client:  
 **Server**

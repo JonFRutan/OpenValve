@@ -81,7 +81,7 @@ def get_user_summary():
         return jsonify({"error": str(e)}), 500
         
 # from a users steamID, grab their friends list in the form of SteamIDs
-# Note: the 'GET' request method will contain the steam_id in its request args
+# NOTE: the 'GET' request method will contain the steam_id in its request args
 @app.route('/api/friends', methods=['GET'])
 def get_friends():
     steam_id = request.args.get('steamid') #grabbed from the submission box on the client
@@ -164,7 +164,7 @@ def get_games():
                     cur.execute("SELECT steam_id, tags, description, price FROM games WHERE steam_id = ANY(%s)", (app_ids,))
                     local_data = cur.fetchall()
                     
-                    # Create lookup maps
+                    # create lookup maps
                     tag_map = {item['steam_id']: item['tags'] for item in local_data}
                     desc_map = {item['steam_id']: item['description'] for item in local_data}
                     price_map = {item['steam_id']: item['price'] for item in local_data}
@@ -188,7 +188,7 @@ def get_games():
 
     # second, if no steamID was provided...
     else:
-        # CHECK FOR SINGLE GAME SEARCH (appid) - Used by Console
+        # check for a single provided appid  (Used by Console on frontend)
         search_id = request.args.get('appid')
         if search_id:
             conn = get_db_connection()
@@ -202,7 +202,7 @@ def get_games():
                 game = cur.fetchone()
                 
                 if game:
-                    return jsonify([game]) # Return as list for consistency
+                    return jsonify([game]) # return as a list
                 else:
                     return jsonify({"error": "Game not found in database"}), 404
             except Exception as e:
@@ -211,13 +211,11 @@ def get_games():
                 cur.close()
                 conn.close()
 
-        # FALLBACK: RANDOM GAMES - Used for testing or defaults
         limit = request.args.get('limit', 10)
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         try:
-            # Added 'tags' to the SELECT statement
             cur.execute("""
                 SELECT steam_id as appid, name, price, header_image, description, tags 
                 FROM games 
