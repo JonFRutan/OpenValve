@@ -25,7 +25,7 @@ def get_db_connection():
 
 # turns vanityURLs into SteamIDs
 def resolve_steam_identifier(input_id, api_key):
-    # if it's a 17 digit int, return and use it
+    # if it's a 17 digit number, return and use it
     if input_id.isdigit() and len(input_id) == 17:
         return input_id
     # if it's a 'vanity url' resolve it as such
