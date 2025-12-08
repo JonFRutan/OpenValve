@@ -21,47 +21,48 @@ const GameRow = memo(({ game, onClick }) => (
 ));
 
 function App() {
-  // LocalStorage / Account State
+  // local storage and account states
   const [mySteamId, setMySteamId] = useState(localStorage.getItem('ov_steamId') || '');
   const [myUsername, setMyUsername] = useState(localStorage.getItem('ov_username') || '');
   const [isEditingAccount, setIsEditingAccount] = useState(false);
-  // End of LocalStorage
-
+  // trackers for views and tabs
   const [activeMenu, setActiveMenu] = useState('View');
   const [activeTab, setActiveTab] = useState('User');
-  
+  // users, libraries, games
   const [users, setUsers] = useState([]);                   
   const [library, setLibrary] = useState([]);               
   const [rawUserGames, setRawUserGames] = useState({});     
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
-  
+  // pagination state for library page
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 100;
-
+  // local steam id status
   const [steamIdInput, setSteamIdInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+  // graph states
   const [graphMode, setGraphMode] = useState('bar'); 
   const [graphSource, setGraphSource] = useState('Tags'); 
-
+  // console states
   const [consoleHistory, setConsoleHistory] = useState([
     "OpenValve Console Started",
     "Type 'help' for commands."
   ]);
   const [consoleInput, setConsoleInput] = useState('');
   const consoleEndRef = useRef(null);
-
+  // statics for defining tabs and used colors
   const tabs = ['Graph', 'Library', 'User', 'Console'];
   const COLORS = ['#95a92f', '#d8d69f', '#777976', '#c8c8c8', '#af9449', '#6e7d64', '#aeb5a8'];
-
+  
+  // scrolling in the console tab 
   useEffect(() => {
     if (activeTab === 'Console' && consoleEndRef.current) {
       consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [consoleHistory, activeTab]);
 
+  // defaults the page to 1 when the library changes
   useEffect(() => {
     setCurrentPage(1);
   }, [library.length]);
@@ -82,7 +83,7 @@ function App() {
     });
   };
 
-  // grabs a users status, like offline or Busy
+  // grabs a users status, like offline or Busy. This switch interprets the codes that steam returns.
   const getPersonaStateLabel = (stateCode, gameExtraInfo) => {
     if (gameExtraInfo) return `Playing: ${gameExtraInfo}`;
     switch(stateCode) {
@@ -136,22 +137,24 @@ function App() {
 
   // consults the SteamAPI for a user, if they exist, add them to the users list
   // then grabs their games, and updates the library to include it
+  // this can be called manually with the "Add User" button, or autoloaded when using "Add Friends"
   const fetchAndAddUser = async (steamIdToFetch, isAutoLoad = false) => {
     if (!steamIdToFetch) return;
     setLoading(true);
     if (!isAutoLoad) setError('');
 
     try {
+      // get games
       const gameRes = await fetch(`http://localhost:5000/api/games?steamid=${steamIdToFetch}`);
       if (!gameRes.ok) throw new Error(`User not found or Private Profile`);
       const gameData = await gameRes.json();
-
+      // get profile
       const userRes = await fetch(`http://localhost:5000/api/user?steamid=${steamIdToFetch}`);
       if (!userRes.ok) throw new Error(`User profile fetch failed`);
       const userProfile = await userRes.json();
-
+      // adding / updating a user
       setUsers(prevUsers => {
-        // If user exists, update them (might have new level/ban data now)
+        // if user exists, update them (might have new level/ban data now)
         const idx = prevUsers.findIndex(u => u.steamid === userProfile.steamid);
         if (idx !== -1) {
            const newUsers = [...prevUsers];
@@ -161,6 +164,7 @@ function App() {
         return [...prevUsers, userProfile];
       });
 
+      // update games and libraries
       setRawUserGames(prev => ({ ...prev, [userProfile.steamid]: gameData }));
       
       setLibrary(prevLib => {

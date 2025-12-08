@@ -10,6 +10,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app) 
 
+#DB_CONFIG found by values placed into the local `.env` file
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME"),
     "user": os.getenv("DB_USER"),
@@ -250,7 +251,7 @@ def get_games():
             
 
 # executing SQL from the console
-# Includes sanitization to prevent injection or destructive commands
+# includes sanitization to prevent injection or destructive commands
 @app.route('/api/console/sql', methods=['POST'])
 def execute_console_sql():
     data = request.json
