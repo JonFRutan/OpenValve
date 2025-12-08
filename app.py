@@ -11,10 +11,10 @@ app = Flask(__name__)
 CORS(app) 
 
 DB_CONFIG = {
-    "dbname": "steamgames",
-    "user": "steamadmin",
-    "password": "gobble294#3frank",
-    "host": "localhost"
+    "dbname": os.getenv("DB_NAME"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASS"),
+    "host": os.getenv("DB_HOST")
 }
 
 # unrolls DB_CONFIG and returns the psycopg2 connection
