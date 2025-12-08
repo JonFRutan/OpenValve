@@ -1,11 +1,28 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { 
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
 import './App.css';
 
+// MEMOIZED ROW COMPONENT
+// Extracting this prevents the entire list from re-rendering when parent state changes unrelated to the specific row
+const GameRow = memo(({ game, onClick }) => (
+  <div className="game-row" onClick={() => onClick(game)}>
+    <div className="game-icon" style={game.img_icon_url ? { backgroundImage: `url(http://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg)` } : {}}></div>
+    <div className="game-name-col">{game.name}</div>
+    <div className="game-desc-col">{game.description || '-'}</div>
+    <div className="game-date-col">{game.release_date || '-'}</div>
+    <div className="game-score-col">{game.userScore || '-'}</div>
+    <div className="game-price-col">
+      {parseFloat(game.price) === 0 ? 'FREE' : `$${game.price}`}
+    </div>
+    <div className="game-owner-col">{game.owners.join(', ')}</div>
+  </div>
+));
+
 function App() {
+
   // active trackers for views and tabs
   const [activeMenu, setActiveMenu] = useState('View');
   const [activeTab, setActiveTab] = useState('User');
@@ -16,6 +33,10 @@ function App() {
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 100;
+
   const [steamIdInput, setSteamIdInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +62,11 @@ function App() {
       consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [consoleHistory, activeTab]);
+
+  // Reset to page 1 when library changes (e.g. sorting or adding users)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [library.length]);
 
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
@@ -423,6 +449,22 @@ function App() {
   const closeUserModal = () => {
     setSelectedUser(null);
   }
+  
+  // PAGINATION LOGIC
+  const paginatedLibrary = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return library.slice(startIndex, startIndex + itemsPerPage);
+  }, [library, currentPage]);
+
+  const totalPages = Math.ceil(library.length / itemsPerPage);
+
+  const handlePageChange = (direction) => {
+    if (direction === 'prev' && currentPage > 1) {
+      setCurrentPage(p => p - 1);
+    } else if (direction === 'next' && currentPage < totalPages) {
+      setCurrentPage(p => p + 1);
+    }
+  };
 
 
   /////////////////////////////////////////////////////
@@ -746,21 +788,31 @@ function App() {
                   </div>
 
                   {library.length > 0 ? (
+                    <>
                     <div className="game-list">
-                      {library.map(game => (
-                        <div key={game.appid} className="game-row" onClick={() => handleGameClick(game)}>
-                          <div className="game-icon" style={game.img_icon_url ? { backgroundImage: `url(http://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg)` } : {}}></div>
-                          <div className="game-name-col">{game.name}</div>
-                          <div className="game-desc-col">{game.description || '-'}</div>
-                          <div className="game-date-col">{game.release_date || '-'}</div>
-                          <div className="game-score-col">{game.userScore || '-'}</div>
-                          <div className="game-price-col">
-                            {parseFloat(game.price) === 0 ? 'FREE' : `$${game.price}`}
-                          </div>
-                          <div className="game-owner-col">{game.owners.join(', ')}</div>
-                        </div>
+                      {paginatedLibrary.map(game => (
+                        <GameRow key={game.appid} game={game} onClick={handleGameClick} />
                       ))}
                     </div>
+                    {/* Pagination Footer */}
+                    <div className="library-footer">
+                       <button 
+                          className="pagination-btn" 
+                          onClick={() => handlePageChange('prev')} 
+                          disabled={currentPage === 1}
+                       >
+                         &lt; PREV
+                       </button>
+                       <span>PAGE {currentPage} OF {totalPages || 1}</span>
+                       <button 
+                          className="pagination-btn" 
+                          onClick={() => handlePageChange('next')} 
+                          disabled={currentPage === totalPages}
+                       >
+                         NEXT &gt;
+                       </button>
+                    </div>
+                    </>
                   ) : (
                     <div className="placeholder-box">
                       <p>Library is empty. Add users in the User tab.</p>

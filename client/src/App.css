@@ -118,6 +118,22 @@ body, html, #root {
 
 .game-list { background-color: #3e4637; flex: 1; overflow-y: auto; padding: 4px; }
 
+/* NEW: Footer for Pagination */
+.library-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 8px; background-color: var(--steam-olive-main);
+  border-top: 1px solid var(--steam-dark); color: #c8c8c8; font-size: 10px;
+  flex-shrink: 0;
+}
+
+.pagination-btn {
+  background-color: #4b5440; color: #fff; font-family: inherit; font-size: 10px; padding: 2px 8px;
+  cursor: pointer; border-radius: 0; outline: none;
+  border: 1px solid; border-color: var(--steam-light) var(--steam-dark) var(--steam-dark) var(--steam-light);
+}
+.pagination-btn:hover { background-color: #56604a; }
+.pagination-btn:disabled { color: #666; background-color: #333; cursor: not-allowed; }
+
 .game-row {
   display: flex; align-items: center;
   padding: 3px; height: 20px;
