@@ -1,55 +1,55 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { 
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, 
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
+} from 'recharts';
 import './App.css';
 
 function App() {
-
-  // palette
-  const COLORS = ['#95a92f', '#d8d69f', '#777976', '#c8c8c8', '#af9449', '#6e7d64', '#aeb5a8'];
 
   // active trackers for views and tabs
   const [activeMenu, setActiveMenu] = useState('View');
   const [activeTab, setActiveTab] = useState('User');
   // users, libraries, and games
-  const [users, setUsers] = useState([]);                   // list of all added users
-  const [library, setLibrary] = useState([]);               // 
-  const [rawUserGames, setRawUserGames] = useState({});     // list of all steam games pulled from users
-
+  const [users, setUsers] = useState([]);                   
+  const [library, setLibrary] = useState([]);               
+  const [rawUserGames, setRawUserGames] = useState({});     
+  const [selectedGame, setSelectedGame] = useState(null);
+  
   const [steamIdInput, setSteamIdInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [graphMode, setGraphMode] = useState('bar');
+  
+  // graph States
+  const [graphMode, setGraphMode] = useState('bar'); // bar, pie, radar
+  const [graphSource, setGraphSource] = useState('Tags'); // Tags, Genres, Categories
 
   // console states
   const [consoleHistory, setConsoleHistory] = useState([
-    "OpenValve Console Initialized",
-    "Type 'help' for a list of commands."
+    "OpenValve Console Started",
+    "Type 'help' for commands."
   ]);
   const [consoleInput, setConsoleInput] = useState('');
   const consoleEndRef = useRef(null);
 
-  // tabs
   const tabs = ['Graph', 'Library', 'User', 'Console'];
 
-  // scrolls the console window down for new entries
+  const COLORS = ['#95a92f', '#d8d69f', '#777976', '#c8c8c8', '#af9449', '#6e7d64', '#aeb5a8'];
+
   useEffect(() => {
     if (activeTab === 'Console' && consoleEndRef.current) {
       consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [consoleHistory, activeTab]);
 
-  // formats the date into something legible
-  // steam returns a 
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp * 1000).toLocaleDateString(undefined, {
-      year: 'numeric', //e.g. 2012
-      month: 'short',  //e.g. 9
-      day: 'numeric'   //e.g. 21
+      year: 'numeric', month: 'short', day: 'numeric'
     });
   };
 
-  // combines all the users libraries into one collection to be displayed on the 'Library' tab
+// combines all the users libraries into one collection to be displayed on the 'Library' tab
   const mergeLibrary = (currentLibrary, newGames, ownerName) => {
     const gameMap = new Map();
     currentLibrary.forEach(g => {
@@ -62,15 +62,14 @@ function App() {
         if (!existingGame.owners.includes(ownerName)) {
           existingGame.owners.push(ownerName);
         }
-        if ((!existingGame.tags || existingGame.tags.length === 0) && game.tags) {
-          existingGame.tags = game.tags;
-        }
-        if ((!existingGame.tags || existingGame.tags.length === 0) && game.tags) {
-          existingGame.tags = game.tags;
-        }
+        // merge metadata if missing
+        if (!existingGame.tags && game.tags) existingGame.tags = game.tags;
+        if (!existingGame.genres && game.genres) existingGame.genres = game.genres;
+        if (!existingGame.categories && game.categories) existingGame.categories = game.categories;
         if (!existingGame.description && game.description) existingGame.description = game.description;
         if (!existingGame.price && game.price) existingGame.price = game.price;
-
+        if (!existingGame.release_date && game.release_date) existingGame.release_date = game.release_date;
+        if (!existingGame.userScore && game.userScore) existingGame.userScore = game.userScore;
       } else {
         gameMap.set(game.appid, { ...game, owners: [ownerName] });
       }
@@ -295,51 +294,49 @@ function App() {
     }
   };
 
-  // chart data calculation
-  const piGraphData = useMemo(() => {
+// graph data calculations
+  const graphData = useMemo(() => {
     if (library.length === 0) return [];
 
-    const tagCounts = {};
+    const counts = {};
+    const sourceKey = graphSource.toLowerCase(); // 'tags', 'genres', 'categories'
 
     library.forEach(game => {
-      let tagsList = [];
+      let rawData = game[sourceKey];
+      let itemsList = [];
 
-      // see if it has tags
-      if (game.tags) {
-        if (Array.isArray(game.tags)) {
-          tagsList = game.tags;
-        } else if (typeof game.tags === 'object') {
-          tagsList = Object.keys(game.tags);
+      //nNormalize data (handle objects, arrays, or dicts)
+      if (rawData) {
+        if (Array.isArray(rawData)) {
+          // arrays (e.g. Genres: ["Action", "Indie"] or [{id:1, description:"Action"}])
+          rawData.forEach(item => {
+            if (typeof item === 'string') itemsList.push(item);
+            else if (typeof item === 'object' && item.description) itemsList.push(item.description);
+          });
+        } else if (typeof rawData === 'object') {
+          // dictionary (e.g. Tags: {"FPS": 100, "Action": 50})
+          itemsList = Object.keys(rawData);
         }
       }
 
-      if (tagsList.length === 0 && game.genres && Array.isArray(game.genres)) {
-        tagsList = game.genres;
+      if (itemsList.length === 0) {
+        // only use 'Uncategorized' if looking at Tags, otherwise ignore
+        if (sourceKey === 'tags') itemsList = ['Uncategorized'];
       }
 
-      if (tagsList.length === 0) {
-        tagsList = ['Uncategorized'];
-      }
-
-      tagsList.forEach(tag => {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      itemsList.forEach(item => {
+        counts[item] = (counts[item] || 0) + 1;
       });
     });
 
-    // only use tags found in X% of all the games
-    const threshold = library.length * 0.20;
+    // only use tags found in AT LEAST 15% of games, and genres found in AT LEAST 5% of games.
+    const threshold = library.length * (graphSource === 'Tags' ? 0.15 : 0.05); 
 
-    // convert to array, filter by threshold, and sort
-    const data = Object.keys(tagCounts)
-      .map(key => ({
-        name: key,
-        value: tagCounts[key]
-      }))
-      .filter(item => item.value >= threshold) // Only keep tags in >= 20% of games
+    return Object.keys(counts)
+      .map(key => ({ name: key, value: counts[key] }))
+      .filter(item => item.value >= threshold)
       .sort((a, b) => b.value - a.value);
-
-    return data
-  }, [library]);
+  }, [library, graphSource]);
 
 
   const CustomTooltip = ({ active, payload }) => {
@@ -353,10 +350,18 @@ function App() {
     return null;
   };
 
+  const handleGameClick = (game) => {
+    setSelectedGame(game);
+  }
+
+  const closeGameModal = () => {
+    setSelectedGame(null);
+  }
+
 
   /////////////////////////////////////////////////////
   //                                                 //
-  //               The returned frontend             //
+  //                   THE FRONTEND                  //
   //                                                 //
   /////////////////////////////////////////////////////
   return (
@@ -398,39 +403,65 @@ function App() {
                 <div className="graph-container">
                   {library.length > 0 ? (
                     <>
-                      <div className="library-header" style={{ justifyContent: 'space-between' }}>
-                        <span style={{ flexGrow: 1 }}>LIBRARY TAG DISTRIBUTION</span>
+                      <div className="library-header" style={{justifyContent: 'space-between', alignItems: 'center'}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                           <span>LIBRARY DISTRIBUTION:</span>
+                           {/* Dropdown Selector */}
+                           <select 
+                              value={graphSource} 
+                              onChange={(e) => setGraphSource(e.target.value)}
+                              style={{
+                                backgroundColor: '#3d4436', 
+                                color: '#d8d69f', 
+                                border: '1px solid #777976',
+                                fontSize: '10px',
+                                fontFamily: 'inherit',
+                                outline: 'none'
+                              }}
+                           >
+                              <option value="Tags">Tags</option>
+                              <option value="Genres">Genres</option>
+                              <option value="Categories">Categories</option>
+                           </select>
+                        </div>
+
                         <div className="graph-header-controls">
-                          <button
+                          <button 
                             className={`graph-toggle-btn ${graphMode === 'bar' ? 'active' : ''}`}
                             onClick={() => setGraphMode('bar')}
                           >
-                            BAR
+                            [ BAR ]
                           </button>
-                          <button
+                          <button 
                             className={`graph-toggle-btn ${graphMode === 'pie' ? 'active' : ''}`}
                             onClick={() => setGraphMode('pie')}
                           >
-                            PIE
+                            [ PIE ]
+                          </button>
+                          <button 
+                            className={`graph-toggle-btn ${graphMode === 'radar' ? 'active' : ''}`}
+                            onClick={() => setGraphMode('radar')}
+                          >
+                            [ RADAR ]
                           </button>
                         </div>
                       </div>
-
+                      
                       <div className="graph-wrapper">
                         {/* Bar Chart */}
                         {graphMode === 'bar' && (
                           <div className="chart-container">
-                            {piGraphData.length > 0 ? (
+                            {graphData.length > 0 ? (
                               (() => {
-                                const maxVal = Math.max(...piGraphData.map(d => d.value), 1);
-                                return piGraphData.map((entry, i) => (
+                                const maxVal = Math.max(...graphData.map(d => d.value), 1);
+                                return graphData.map((entry, i) => (
                                   <div key={entry.name} className="chart-row">
                                     <div className="chart-label" title={entry.name}>
                                       {entry.name.toUpperCase()}
                                     </div>
                                     <div className="chart-bar-track">
-                                      <div
-                                        className="chart-bar-fill"
+                                      <div 
+                                        className="chart-bar-fill" 
                                         style={{
                                           width: `${(entry.value / maxVal) * 100}%`,
                                           backgroundColor: COLORS[i % COLORS.length]
@@ -443,46 +474,38 @@ function App() {
                               })()
                             ) : (
                               <div className="placeholder-box">
-                                <p>Games loaded, but no tags data found.</p>
+                                <p>No {graphSource} data found matching criteria.</p>
                               </div>
                             )}
                           </div>
                         )}
 
                         {/* Pie Chart */}
-                        {graphMode === 'pie' && piGraphData.length > 0 && (
+                        {graphMode === 'pie' && graphData.length > 0 && (
                           <div className="graph-absolute-fill">
                             <ResponsiveContainer width="100%" height="100%">
                               <PieChart>
                                 <Pie
-                                  data={piGraphData}
+                                  data={graphData}
                                   cx="50%"
                                   cy="50%"
                                   labelLine={false}
-                                  outerRadius={300} // size of the pie chart
-                                  fill="#8884d8"
+                                  outerRadius={350}
                                   dataKey="value"
                                   stroke="#20241b" 
                                   strokeWidth={2}
                                 >
-                                  {piGraphData.map((entry, index) => (
+                                  {graphData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                   ))}
                                 </Pie>
                                 <Tooltip content={<CustomTooltip />} />
                                 <Legend 
-                                  layout="vertical" 
-                                  verticalAlign="middle" 
-                                  align="right"
+                                  layout="vertical" verticalAlign="middle" align="right"
                                   wrapperStyle={{
-                                    fontSize: '10px', 
-                                    color: '#c8c8c8',
-                                    right: 20,
-                                    backgroundColor: '#3d4436', 
-                                    border: '1px solid #777976', 
-                                    padding: '10px',
-                                    maxHeight: '80%',       
-                                    overflowY: 'auto'       
+                                    fontSize: '10px', color: '#c8c8c8', right: 20,
+                                    backgroundColor: '#3d4436', border: '1px solid #777976', 
+                                    padding: '10px', maxHeight: '80%', overflowY: 'auto'
                                   }}
                                 />
                               </PieChart>
@@ -490,10 +513,32 @@ function App() {
                           </div>
                         )}
 
-                      </div>
+                        {/* Radar Chart */}
+                        {graphMode === 'radar' && graphData.length > 0 && (
+                          <div className="graph-absolute-fill">
+                             <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={graphData.slice(0, 15)}>
+                                  <PolarGrid stroke="#5a6a50" />
+                                  <PolarAngleAxis dataKey="name" tick={{ fill: '#c8c8c8', fontSize: 10 }} />
+                                  <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#95a92f', fontSize: 10 }} />
+                                  <Radar
+                                    name={graphSource}
+                                    dataKey="value"
+                                    stroke="#d8d69f"
+                                    strokeWidth={2}
+                                    fill="#95a92f"
+                                    fillOpacity={0.6}
+                                  />
+                                  <Tooltip content={<CustomTooltip />} />
+                                </RadarChart>
+                             </ResponsiveContainer>
+                          </div>
+                        )}
 
+                      </div>
+                      
                       <div className="graph-footer">
-                        Top tags based on {library.length} games.
+                         Top {graphSource} based on {library.length} games.
                       </div>
                     </>
                   ) : (
@@ -580,19 +625,23 @@ function App() {
               {activeTab === 'Library' && (
                 <>
                   <div className="library-header">
-                    <span style={{width: '232px'}}>NAME</span> 
-                    <span style={{flexGrow: 1}}>DESCRIPTION</span>
-                    <span style={{width: '60px', textAlign: 'right'}}>PRICE</span>
-                    <span style={{width: '180px', textAlign: 'right', marginLeft: '8px'}}>OWNER(S)</span>
+                    <span className="game-name-col">NAME</span> 
+                    <span className="game-desc-col">DESCRIPTION</span>
+                    <span className="game-date-col">RELEASED</span>
+                    <span className="game-score-col">SCORE</span>
+                    <span className="game-price-col">PRICE</span>
+                    <span className="game-owner-col">OWNER(S)</span>
                   </div>
 
                   {library.length > 0 ? (
                     <div className="game-list">
                       {library.map(game => (
-                        <div key={game.appid} className="game-row">
+                        <div key={game.appid} className="game-row" onClick={() => handleGameClick(game)}>
                           <div className="game-icon" style={game.img_icon_url ? { backgroundImage: `url(http://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg)` } : {}}></div>
-                          <div className="game-name">{game.name}</div>
+                          <div className="game-name-col">{game.name}</div>
                           <div className="game-desc-col">{game.description || '-'}</div>
+                          <div className="game-date-col">{game.release_date || '-'}</div>
+                          <div className="game-score-col">{game.userScore || '-'}</div>
                           <div className="game-price-col">
                             {parseFloat(game.price) === 0 ? 'FREE' : `$${game.price}`}
                           </div>
@@ -603,6 +652,43 @@ function App() {
                   ) : (
                     <div className="placeholder-box">
                       <p>Library is empty. Add users in the User tab.</p>
+                    </div>
+                  )}
+
+                  {/* GAME DETAIL CARD OVERLAY */}
+                  {selectedGame && (
+                    <div className="modal-overlay" onClick={closeGameModal}>
+                      <div className="game-detail-card" onClick={(e) => e.stopPropagation()}>
+                        <div className="detail-header">
+                          <span className="detail-title">{selectedGame.name}</span>
+                          <span className="close-x" onClick={closeGameModal}>X</span>
+                        </div>
+                        <div className="detail-content">
+                          <div className="detail-left">
+                             <img 
+                                src={`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${selectedGame.appid}/header.jpg`} 
+                                alt={selectedGame.name}
+                                className="detail-image"
+                                onError={(e) => {e.target.style.display='none'}}
+                             />
+                             <div className="detail-stats">
+                                <div><strong>App ID:</strong> {selectedGame.appid}</div>
+                                <div><strong>Price:</strong> {parseFloat(selectedGame.price) === 0 ? 'Free' : `$${selectedGame.price}`}</div>
+                                <div><strong>Released:</strong> {selectedGame.release_date || 'N/A'}</div>
+                                <div><strong>Score:</strong> {selectedGame.userScore || 'N/A'}</div>
+                             </div>
+                          </div>
+                          <div className="detail-right">
+                             <div className="detail-desc">{selectedGame.description || 'No description available.'}</div>
+                             <div className="detail-tags">
+                                {selectedGame.tags && typeof selectedGame.tags === 'object' 
+                                  ? Object.keys(selectedGame.tags).map(t => <span key={t} className="tag-pill">{t}</span>)
+                                  : null}
+                             </div>
+                             <div className="detail-owners">Owned by: {selectedGame.owners.join(', ')}</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </>

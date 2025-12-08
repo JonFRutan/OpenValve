@@ -197,12 +197,12 @@ html,
 }
 
 /* SCROLLBAR */
-.game-list::-webkit-scrollbar, .chart-container::-webkit-scrollbar {
+.game-list::-webkit-scrollbar, .chart-container::-webkit-scrollbar, .detail-desc::-webkit-scrollbar {
   width: 16px;
   background: #5a6a50;
 }
 
-.game-list::-webkit-scrollbar-thumb, .chart-container::-webkit-scrollbar-thumb {
+.game-list::-webkit-scrollbar-thumb, .chart-container::-webkit-scrollbar-thumb, .detail-desc::-webkit-scrollbar-thumb {
   background-color: var(--steam-olive-main);
   border: 1px solid var(--steam-dark);
   border-radius: 2px;
@@ -239,8 +239,8 @@ html,
   align-items: center;
   padding: 3px;
   color: var(--steam-text-main);
-  gap: 8px;
-  cursor: default;
+  gap: 0; /* managed by cols */
+  cursor: pointer;
   height: 20px;
   
   border-bottom: 1px solid #2b2b2b; 
@@ -250,7 +250,7 @@ html,
   background-color: #4b5440;
   color: #fff;
   border: 1px dotted #777;
-  padding: 1px 3px;
+  padding: 1px 2px; /* compensate border */
 }
 
 .game-icon {
@@ -259,9 +259,12 @@ html,
   flex-shrink: 0;
   background-color: #000;
   border: 1px solid #555;
+  margin-right: 8px;
+  background-size: cover;
 }
 
-.game-name {
+/* COLUMNS */
+.game-name-col {
   width: 200px;
   flex-shrink: 0;
   font-weight: normal;
@@ -269,6 +272,7 @@ html,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-right: 8px;
 }
 
 .game-desc-col {
@@ -280,18 +284,42 @@ html,
   overflow: hidden;
   text-overflow: ellipsis;
   padding-right: 8px;
+  min-width: 100px;
+}
+
+.game-date-col {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #aeb5a8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: left;
+  padding-right: 8px;
+}
+
+.game-score-col {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #aeb5a8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: left;
+  padding-right: 8px;
 }
 
 .game-price-col {
-  width: 8px;
+  width: 60px;
   text-align: right;
   color: var(--steam-text-green);
   font-size: 10px;
   flex-shrink: 0;
+  padding-right: 8px;
 }
 
 .game-owner-col {
-  width: 180px;
+  width: 120px;
   font-size: 10px;
   color: var(--steam-text-green);
   white-space: nowrap;
@@ -299,8 +327,124 @@ html,
   text-overflow: ellipsis;
   text-align: right;
   flex-shrink: 0;
-  margin-left: 8px;
 }
+
+
+/* DETAIL CARD OVERLAY */
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.game-detail-card {
+  width: 500px;
+  background-color: var(--steam-olive-main);
+  border-top: 1px solid var(--steam-light);
+  border-left: 1px solid var(--steam-light);
+  border-right: 2px solid var(--steam-dark);
+  border-bottom: 2px solid var(--steam-dark);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  box-shadow: 10px 10px 20px rgba(0,0,0,0.5);
+}
+
+.detail-header {
+  background-color: var(--steam-olive-main);
+  color: #fff;
+  font-weight: bold;
+  padding: 4px 8px;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--steam-olive-inset);
+  margin-bottom: 8px;
+}
+
+.close-x {
+  cursor: pointer;
+  color: #888;
+}
+.close-x:hover { color: #fff; }
+
+.detail-content {
+  display: flex;
+  gap: 12px;
+  padding: 8px;
+  background-color: #3e4637;
+  border: 1px solid var(--steam-dark);
+}
+
+.detail-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.detail-image {
+  width: 100%;
+  border: 1px solid var(--steam-light);
+}
+
+.detail-stats {
+  font-size: 10px;
+  color: #aaa;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-stats strong { color: #ccc; }
+
+.detail-right {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-desc {
+  font-size: 11px;
+  color: #ddd;
+  height: 100px;
+  overflow-y: auto;
+  line-height: 1.4;
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-pill {
+  background-color: #4b5440;
+  border: 1px solid #777;
+  padding: 2px 4px;
+  font-size: 9px;
+  color: #d8d69f;
+}
+
+.detail-owners {
+  margin-top: auto;
+  font-size: 10px;
+  color: var(--steam-text-green);
+  text-align: right;
+  border-top: 1px dashed #555;
+  padding-top: 4px;
+}
+
+
+/* Existing css below... */
 
 .placeholder-box {
   display: flex;
@@ -709,5 +853,41 @@ html,
 }
 
 .recharts-wrapper:focus {
+  outline: none !important;
+}
+
+/* Horrible Focus Removal */
+
+button:focus, 
+input:focus, 
+select:focus,
+.tab-button:focus,
+.menu-item:focus,
+.add-user-btn:focus,
+.graph-toggle-btn:focus,
+.remove-x:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.recharts-wrapper {
+  outline: none !important;
+}
+
+.recharts-surface:focus,
+.recharts-radar:focus,
+.recharts-radar-polygon:focus,
+.recharts-layer:focus,
+.recharts-sector:focus,    /* Pie Slices */
+.recharts-polygon:focus,   /* Radar Shapes */
+.recharts-rectangle:focus, /* Bar Rectangles */
+.recharts-legend-item:focus {
+  outline: none !important;
+}
+
+.recharts-surface path:focus,
+.recharts-surface circle:focus,
+.recharts-surface rect:focus,
+.recharts-surface polygon:focus {
   outline: none !important;
 }

@@ -122,21 +122,20 @@ def get_friends():
         return jsonify({"error": "Failed to fetch friends. Profile might be private."}), 500
 
 # get all the games a user owns
-# Note: the 'GET' request method will contain the steam_id in its request args
 @app.route('/api/games', methods=['GET'])
 def get_games():
-    raw_input = request.args.get('steamid') #grabbed from the submission box on the client
+    raw_input = request.args.get('steamid') 
     
-    # first, see if the steamID was provided (USER LIBRARY LOOKUP)
+    # user library lookup.
     if raw_input:
         api_key = os.getenv('STEAM_API_KEY')
         if not api_key:
             return jsonify({"error": "Server missing STEAM_API_KEY"}), 500
-        # resolve their id
+
         resolved_id = resolve_steam_identifier(raw_input, api_key)
         if not resolved_id:
             return jsonify({"error": "User not found"}), 404
-        # make the API call
+
         try:
             url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
             params = {
@@ -149,32 +148,40 @@ def get_games():
             response = requests.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-            # if the API call was successful, we'll grab the list of games from the users library
             games_list = data.get('response', {}).get('games', []) 
 
-            # attach the tags, descriptions, and prices
+            # attaching the metadata to the app ids.
             if games_list:
-                # get the app ids of the games
                 app_ids = [g['appid'] for g in games_list]
                 conn = get_db_connection()
                 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 try:
-                    # ask the db for tags, description, and price
-                    # uses Postgres ANY() for array matching
-                    cur.execute("SELECT steam_id, tags, description, price FROM games WHERE steam_id = ANY(%s)", (app_ids,))
+                    cur.execute("""
+                        SELECT steam_id, tags, description, price, genres, categories, release_date, user_score
+                        FROM games 
+                        WHERE steam_id = ANY(%s)
+                    """, (app_ids,))
                     local_data = cur.fetchall()
                     
-                    # create lookup maps
+                    # Create lookup maps
                     tag_map = {item['steam_id']: item['tags'] for item in local_data}
                     desc_map = {item['steam_id']: item['description'] for item in local_data}
                     price_map = {item['steam_id']: item['price'] for item in local_data}
+                    genre_map = {item['steam_id']: item['genres'] for item in local_data}
+                    cat_map = {item['steam_id']: item['categories'] for item in local_data}
+                    date_map = {item['steam_id']: item['release_date'] for item in local_data}
+                    score_map = {item['steam_id']: item['user_score'] for item in local_data}
                     
-                    # attach data to the steam game objects
+                    # attach data
                     for game in games_list:
                         gid = game['appid']
                         game['tags'] = tag_map.get(gid, [])
                         game['description'] = desc_map.get(gid, "")
                         game['price'] = price_map.get(gid, "")
+                        game['genres'] = genre_map.get(gid, [])
+                        game['categories'] = cat_map.get(gid, [])
+                        game['release_date'] = date_map.get(gid, "")
+                        game['userScore'] = score_map.get(gid, "")
                         
                 except Exception as db_err:
                     print(f"Database Enrichment Error: {db_err}")
@@ -186,44 +193,35 @@ def get_games():
         except Exception as e:
             return jsonify({"error": "Failed to fetch from Steam API"}), 502
 
-    # second, if no steamID was provided...
+    # console search & fallback
     else:
-        # check for a single provided appid  (Used by Console on frontend)
         search_id = request.args.get('appid')
-        if search_id:
-            conn = get_db_connection()
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        try:
+            if search_id:
                 cur.execute("""
-                    SELECT steam_id as appid, name, price, description, tags 
+                    SELECT steam_id as appid, name, price, description, tags, genres, categories, release_date, user_score
                     FROM games 
                     WHERE steam_id = %s
                 """, (search_id,))
                 game = cur.fetchone()
-                
                 if game:
-                    return jsonify([game]) # return as a list
-                else:
-                    return jsonify({"error": "Game not found in database"}), 404
-            except Exception as e:
-                return jsonify({"error": str(e)}), 500
-            finally:
-                cur.close()
-                conn.close()
-
-        limit = request.args.get('limit', 10)
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        try:
-            cur.execute("""
-                SELECT steam_id as appid, name, price, header_image, description, tags 
-                FROM games 
-                ORDER BY RANDOM() 
-                LIMIT %s;
-            """, (limit,))
-            games = cur.fetchall()
-            return jsonify(games)
+                    game['userScore'] = game.pop('user_score', None)
+                return jsonify([game]) if game else (jsonify({"error": "Game not found"}), 404)
+            else:
+                limit = request.args.get('limit', 10)
+                cur.execute("""
+                    SELECT steam_id as appid, name, price, header_image, description, tags, genres, categories, release_date, user_score
+                    FROM games 
+                    ORDER BY RANDOM() 
+                    LIMIT %s;
+                """, (limit,))
+                games = cur.fetchall()
+                for g in games:
+                    g['userScore'] = g.pop('user_score', None)
+                return jsonify(games)
         except Exception as e:
             return jsonify({"error": str(e)}), 500
         finally:
