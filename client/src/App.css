@@ -91,6 +91,7 @@ body, html, #root {
   cursor: pointer; text-align: center;
   border: 1px solid;
   border-color: var(--steam-light) var(--steam-dark) var(--steam-dark) var(--steam-light);
+  border-radius: 0; /* Fixed */
 }
 .tab-button:hover { background: #56604a; color: #fff; }
 .tab-button.active {
@@ -180,6 +181,7 @@ body, html, #root {
   cursor: pointer; width: 100%; margin-top: 3px;
   border: 1px solid;
   border-color: var(--steam-light) var(--steam-dark) var(--steam-dark) var(--steam-light);
+  border-radius: 0; /* Fixed */
 }
 .add-user-btn:hover { background-color: #56604a; }
 .add-user-btn:disabled { color: #777; background-color: #333; cursor: not-allowed; }
