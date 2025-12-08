@@ -3,12 +3,12 @@ import ijson
 import os
 import json
 
-# local database
+# local database config.
 DB_CONFIG = {
-    "dbname": "steamgames",
-    "user": "steamadmin",
-    "password": "gobble294#3frank",
-    "host": "localhost"
+    "dbname": os.getenv("DB_NAME"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASS"),
+    "host": os.getenv("DB_HOST")
 }
 
 JSON_FILE = '/opt/Steam/Data/games.json'
