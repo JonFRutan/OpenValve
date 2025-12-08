@@ -23,7 +23,8 @@ def migrate():
         return
 
     try:
-        cur.execute("DROP TABLE IF EXISTS games;")
+        cur.execute("DROP TABLE IF EXISTS games;") # delete the table if it exists
+        # then load it up with all the stuff from the kaggle dataset
         cur.execute("""
             CREATE TABLE games (
                 id SERIAL PRIMARY KEY,
