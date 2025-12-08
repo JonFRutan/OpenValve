@@ -5,8 +5,7 @@ import {
 } from 'recharts';
 import './App.css';
 
-// MEMOIZED ROW COMPONENT
-// Extracting this prevents the entire list from re-rendering when parent state changes unrelated to the specific row
+// game rows
 const GameRow = memo(({ game, onClick }) => (
   <div className="game-row" onClick={() => onClick(game)}>
     <div className="game-icon" style={game.img_icon_url ? { backgroundImage: `url(http://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg)` } : {}}></div>
@@ -22,18 +21,21 @@ const GameRow = memo(({ game, onClick }) => (
 ));
 
 function App() {
+  // LocalStorage / Account State
+  const [mySteamId, setMySteamId] = useState(localStorage.getItem('ov_steamId') || '');
+  const [myUsername, setMyUsername] = useState(localStorage.getItem('ov_username') || '');
+  const [isEditingAccount, setIsEditingAccount] = useState(false);
+  // End of LocalStorage
 
-  // active trackers for views and tabs
   const [activeMenu, setActiveMenu] = useState('View');
   const [activeTab, setActiveTab] = useState('User');
-  // users, libraries, and games
+  
   const [users, setUsers] = useState([]);                   
   const [library, setLibrary] = useState([]);               
   const [rawUserGames, setRawUserGames] = useState({});     
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 100;
 
@@ -41,11 +43,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // graph States
-  const [graphMode, setGraphMode] = useState('bar'); // bar, pie, radar
-  const [graphSource, setGraphSource] = useState('Tags'); // tags, genres, categories
+  const [graphMode, setGraphMode] = useState('bar'); 
+  const [graphSource, setGraphSource] = useState('Tags'); 
 
-  // console states
   const [consoleHistory, setConsoleHistory] = useState([
     "OpenValve Console Started",
     "Type 'help' for commands."
@@ -54,7 +54,6 @@ function App() {
   const consoleEndRef = useRef(null);
 
   const tabs = ['Graph', 'Library', 'User', 'Console'];
-
   const COLORS = ['#95a92f', '#d8d69f', '#777976', '#c8c8c8', '#af9449', '#6e7d64', '#aeb5a8'];
 
   useEffect(() => {
@@ -63,11 +62,19 @@ function App() {
     }
   }, [consoleHistory, activeTab]);
 
-  // Reset to page 1 when library changes (e.g. sorting or adding users)
   useEffect(() => {
     setCurrentPage(1);
   }, [library.length]);
 
+  // autoload stored steamid from storage
+  useEffect(() => {
+    const storedId = localStorage.getItem('ov_steamId');
+    if (storedId) {
+      fetchAndAddUser(storedId, true); 
+    }
+  }, []);
+
+  // format the returned steam timestamp
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp * 1000).toLocaleDateString(undefined, {
@@ -75,7 +82,7 @@ function App() {
     });
   };
 
-  // Helper to interpret Steam's personastate integer
+  // grabs a users status, like offline or Busy
   const getPersonaStateLabel = (stateCode, gameExtraInfo) => {
     if (gameExtraInfo) return `Playing: ${gameExtraInfo}`;
     switch(stateCode) {
@@ -90,13 +97,15 @@ function App() {
     }
   };
 
+  // if they are in a game, return the game being played
   const getPersonaStateClass = (stateCode, gameExtraInfo) => {
     if (gameExtraInfo) return 'user-status-ingame';
     if (stateCode === 0) return 'user-status-offline';
     return 'user-status-online';
   };
 
-// combines all the users libraries into one collection to be displayed on the 'Library' tab
+  // combines all the data grabbed about the games from the users libraries and puts them into one large collection
+  // this is displayed in the library tab
   const mergeLibrary = (currentLibrary, newGames, ownerName) => {
     const gameMap = new Map();
     currentLibrary.forEach(g => {
@@ -109,7 +118,7 @@ function App() {
         if (!existingGame.owners.includes(ownerName)) {
           existingGame.owners.push(ownerName);
         }
-        // merge metadata if missing
+        //if any of this info exists, assign it to the existing game
         if (!existingGame.tags && game.tags) existingGame.tags = game.tags;
         if (!existingGame.genres && game.genres) existingGame.genres = game.genres;
         if (!existingGame.categories && game.categories) existingGame.categories = game.categories;
@@ -125,79 +134,99 @@ function App() {
     return Array.from(gameMap.values());
   };
 
-  // adding a new user to the 'users' array, and including their games into the steam library
-  const handleAddUser = async (e) => {
-    e.preventDefault(); //prevents page reload
-    if (!steamIdInput) return;
-
+  // consults the SteamAPI for a user, if they exist, add them to the users list
+  // then grabs their games, and updates the library to include it
+  const fetchAndAddUser = async (steamIdToFetch, isAutoLoad = false) => {
+    if (!steamIdToFetch) return;
     setLoading(true);
-    setError('');
+    if (!isAutoLoad) setError('');
 
-    // hit the flask servers API (app.py) for resolving an account
     try {
-      // first try hitting for games
-      const gameRes = await fetch(`http://localhost:5000/api/games?steamid=${steamIdInput}`);
+      const gameRes = await fetch(`http://localhost:5000/api/games?steamid=${steamIdToFetch}`);
       if (!gameRes.ok) throw new Error(`User not found or Private Profile`);
       const gameData = await gameRes.json();
-      // then try hitting for profile.
-      const userRes = await fetch(`http://localhost:5000/api/user?steamid=${steamIdInput}`);
+
+      const userRes = await fetch(`http://localhost:5000/api/user?steamid=${steamIdToFetch}`);
       if (!userRes.ok) throw new Error(`User profile fetch failed`);
       const userProfile = await userRes.json();
-      // prevent a user from being added twice.
-      if (users.some(u => u.steamid === userProfile.steamid)) {
-        throw new Error("User already added.");
-      }
 
-      if (Array.isArray(gameData)) {
-        // NOTE: `...` is essentially 'unrolling' the array for it's values.
-        // meaning here we assign the 'newUsers' array as all the previous users from 'users' and include the new userProfile
-        const newUsers = [...users, userProfile];
-        setUsers(newUsers);
-        // similar to last block, 'rawUserGames' is the list of all users games, this is simply updated to include the new users games.
-        const newRawGames = { ...rawUserGames, [userProfile.steamid]: gameData };
-        setRawUserGames(newRawGames);
-        // 
-        const updatedLibrary = mergeLibrary(library, gameData, userProfile.personaname);
-        updatedLibrary.sort((a, b) => a.name.localeCompare(b.name));
-        // change the library to be the new updated library, including the new users games.
-        setLibrary(updatedLibrary);
-        setSteamIdInput('');
-      }
+      setUsers(prevUsers => {
+        // If user exists, update them (might have new level/ban data now)
+        const idx = prevUsers.findIndex(u => u.steamid === userProfile.steamid);
+        if (idx !== -1) {
+           const newUsers = [...prevUsers];
+           newUsers[idx] = userProfile;
+           return newUsers;
+        }
+        return [...prevUsers, userProfile];
+      });
+
+      setRawUserGames(prev => ({ ...prev, [userProfile.steamid]: gameData }));
+      
+      setLibrary(prevLib => {
+        const updated = mergeLibrary(prevLib, gameData, userProfile.personaname);
+        return updated.sort((a, b) => a.name.localeCompare(b.name));
+      });
+
+      if (!isAutoLoad) setSteamIdInput('');
+
     } catch (err) {
       console.error("ADD USER ERROR:", err);
-      setError(err.message || 'Error adding user.');
+      if (!isAutoLoad) setError(err.message || 'Error adding user.');
     } finally {
       setLoading(false);
     }
   };
 
-  // adding all of a currently added users friends.
-  // works iff the user has a public profile AND has their friends visible.
+  // when the "add user" button is clicked
+  const handleAddUser = (e) => {
+    e.preventDefault(); // prevents reloading
+    fetchAndAddUser(steamIdInput);
+  };
+  // saves SteamID and a chosen username to the browser local storage
+  const handleSaveAccount = () => {
+    localStorage.setItem('ov_steamId', mySteamId);
+    localStorage.setItem('ov_username', myUsername);
+    setIsEditingAccount(false);
+    
+    if (mySteamId) {
+      fetchAndAddUser(mySteamId);
+    }
+  };
+
+  // when the 'x' button is clicked on a user card.
+  const handleClearAccount = () => {
+    localStorage.removeItem('ov_steamId');
+    localStorage.removeItem('ov_username');
+    setMySteamId('');
+    setMyUsername('');
+    setIsEditingAccount(true); 
+  };
+
+  // grabs all the friends from a steamID, goes through each one and puts them through the "fetchAndAddUser" function
   const handleAddFriends = async (steamid) => {
     try {
       console.log(`Fetching friends for ${steamid}...`);
       const res = await fetch(`http://localhost:5000/api/friends?steamid=${steamid}`);
       if (!res.ok) throw new Error("Could not fetch friends list");
-      // fetch the friends list from the flask API
+      
       const friendsData = await res.json();
-      // they actually need to have friends
+      
       if (Array.isArray(friendsData) && friendsData.length > 0) {
-        // confusing mess, essentially it checks the users friends against the already added steam ids to avoid repeated usesrs
-        // uses '.filter' to do this
+        
         const newFriends = friendsData.filter(f => !users.some(u => u.steamid === f.steamid));
         if (newFriends.length === 0) {
           alert("All public friends from this user are already added.");
           return;
         }
-        //
+        
         setUsers(prev => [...prev, ...newFriends]);
 
         let currentLib = [...library];
         let currentRaw = { ...rawUserGames };
-        // for every new user found in the friends of a current user...
+        
         for (const friend of newFriends) {
           try {
-            // grab their games
             const gameRes = await fetch(`http://localhost:5000/api/games?steamid=${friend.steamid}`);
             if (gameRes.ok) {
               const games = await gameRes.json();
@@ -220,7 +249,7 @@ function App() {
         }
 
       } else {
-        alert("No friends found."); // mfw :(
+        alert("No friends found."); 
       }
 
     } catch (err) {
@@ -228,13 +257,12 @@ function App() {
       alert("Failed to add friends. Profile might be private.");
     }
   };
-  // when you click the 'X' on a user card, remove their profile from the user cards, and remove their games from the library/
+
+  // removing the user and their games from the library
   const handleRemoveUser = (steamidToRemove) => {
-    // remainingUsers is the list of users with the usersID filtered out from it, then call setUsers again to update the users list without them
     const remainingUsers = users.filter(u => u.steamid !== steamidToRemove);
     setUsers(remainingUsers);
-    // to get the newRawGames, we grab the rawUserGames array, and delete the instance of the users steamId that appear within it.
-    // then call setRawUserGames to update the array.
+    
     const newRawGames = { ...rawUserGames };
     delete newRawGames[steamidToRemove];
     setRawUserGames(newRawGames);
@@ -257,10 +285,9 @@ function App() {
     return <span style={{ color: '#95a92f' }}>{games.length}</span>;
   };
 
-// helper for the 'search' command
+  // when the "search" function is used in the console. Does a lookup on our servers database for the AppID
   const handleConsoleSearch = async (appid) => {
     setConsoleHistory(prev => [...prev, `Searching database for AppID: ${appid}...`]);
-    
     try {
       const res = await fetch(`http://localhost:5000/api/games?appid=${appid}`);
       const data = await res.json();
@@ -286,44 +313,37 @@ function App() {
     }
   };
 
-  // helper for 'sql' command
+  // handles SQL put into the console. Highly sanitized and filtered on the server backend
   const handleConsoleSQL = async (query) => {
-     setConsoleHistory(prev => [...prev, `Executing SQL: ${query}...`]);
-
+     setConsoleHistory(prev => [...prev, `Executing SQL: ${query}...`]); // filling up the console with the history of commands and output
      try {
         const res = await fetch('http://localhost:5000/api/console/sql', {
            method: 'POST',
            headers: { 'Content-Type': 'application/json' },
            body: JSON.stringify({ query: query })
         });
-        
         const data = await res.json();
-
         if (res.ok) {
-           // Basic formatting for the resulting JSON list
            const formatted = JSON.stringify(data, null, 2).split('\n');
            const output = ["STATUS: SUCCESS [200 OK]", ...formatted];
            setConsoleHistory(prev => [...prev, ...output]);
         } else {
            setConsoleHistory(prev => [...prev, `SQL ERROR: ${data.error}`]);
         }
-
      } catch (err) {
         setConsoleHistory(prev => [...prev, `NETWORK ERROR: ${err.message}`]);
      }
   }
 
-  // handles when the user clicks submit in the console
+  // when the "submit" button is used in the console. uses a switch to direct it to the right handler function.
   const handleConsoleSubmit = async (e) => {
     e.preventDefault();
     const input = consoleInput.trim();
     if (!input) return;
 
-    // echo the users input
     setConsoleHistory(prev => [...prev, `] ${input}`]);
     setConsoleInput('');
 
-    // parsing the command
     const parts = input.split(' ');
     const command = parts[0].toLowerCase();
     const args = parts.slice(1);
@@ -341,24 +361,18 @@ function App() {
           "gpt <prompt>   : [NOT IMPLEMENTED]"
         ];
         break;
-
       case 'sql':
-        // use regex to capture content inside quotes
-        // sql "select * from games"
         const match = input.match(/^sql\s+"([^"]+)"$/i);
         if (!match) {
             output = ["Usage: sql \"select * from games where price = 0\""];
         } else {
-            // we return here because handleConsoleSQL is async and handles its own output
             await handleConsoleSQL(match[1]);
             return; 
         }
         break;
-
       case 'gpt':
         output = ["System.NotImplementedException: AI module not connected."];
         break;
-
       case 'search':
         if (args.length === 0) {
           output = ["Usage: search <appid> (e.g., 'search 440')"];
@@ -367,7 +381,6 @@ function App() {
           return; 
         }
         break;
-
       default:
         output = [`Unknown command: '${command}'. Type 'help' for valid commands.`];
     }
@@ -377,33 +390,28 @@ function App() {
     }
   };
 
-// graph data calculations
+  // generates and handles the data to be used for the graph visualizations
   const graphData = useMemo(() => {
     if (library.length === 0) return [];
-
     const counts = {};
-    const sourceKey = graphSource.toLowerCase(); // 'tags', 'genres', 'categories'
+    const sourceKey = graphSource.toLowerCase(); 
 
     library.forEach(game => {
       let rawData = game[sourceKey];
       let itemsList = [];
 
-      //nNormalize data (handle objects, arrays, or dicts)
       if (rawData) {
         if (Array.isArray(rawData)) {
-          // arrays (e.g. Genres: ["Action", "Indie"] or [{id:1, description:"Action"}])
           rawData.forEach(item => {
             if (typeof item === 'string') itemsList.push(item);
             else if (typeof item === 'object' && item.description) itemsList.push(item.description);
           });
         } else if (typeof rawData === 'object') {
-          // dictionary (e.g. Tags: {"FPS": 100, "Action": 50})
           itemsList = Object.keys(rawData);
         }
       }
 
       if (itemsList.length === 0) {
-        // only use 'Uncategorized' if looking at Tags, otherwise ignore
         if (sourceKey === 'tags') itemsList = ['Uncategorized'];
       }
 
@@ -412,7 +420,6 @@ function App() {
       });
     });
 
-    // only use tags found in AT LEAST 15% of games, and genres found in AT LEAST 5% of games.
     const threshold = library.length * (graphSource === 'Tags' ? 0.15 : 0.05); 
 
     return Object.keys(counts)
@@ -433,24 +440,20 @@ function App() {
     return null;
   };
 
+  // some buttons, that direct to proper functions
   const handleGameClick = (game) => {
     setSelectedGame(game);
   }
-
   const closeGameModal = () => {
     setSelectedGame(null);
   }
-  
-  // NEW: User Modal Handlers
   const handleUserClick = (user) => {
     setSelectedUser(user);
   }
-
   const closeUserModal = () => {
     setSelectedUser(null);
   }
   
-  // PAGINATION LOGIC
   const paginatedLibrary = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return library.slice(startIndex, startIndex + itemsPerPage);
@@ -466,12 +469,134 @@ function App() {
     }
   };
 
-
   /////////////////////////////////////////////////////
   //                                                 //
   //                   THE FRONTEND                  //
   //                                                 //
   /////////////////////////////////////////////////////
+  
+  // Account Render Logic Helper
+  const renderAccountContent = () => {
+    // Show form is no ID or in the 'edit' screen
+    if (isEditingAccount || !mySteamId) {
+      return (
+        <div className="user-card-base" style={{ width: '300px' }}>
+          <div className="add-user-header">ACCOUNT SETTINGS</div>
+          <div style={{ fontSize: '10px', color: '#888', margin: '4px 0 10px 0' }}>
+            Settings are saved to your browser local storage.
+          </div>
+
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{display:'block', fontSize:'10px', color:'#aaa', marginBottom:'2px'}}>CHOSEN USERNAME:</label>
+            <input 
+              className="add-user-input" 
+              type="text" 
+              value={myUsername} 
+              onChange={(e) => setMyUsername(e.target.value)} 
+              placeholder="Enter display name"
+            />
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{display:'block', fontSize:'10px', color:'#aaa', marginBottom:'2px'}}>STEAM ID (AUTOLOAD):</label>
+            <input 
+              className="add-user-input" 
+              type="text" 
+              value={mySteamId} 
+              onChange={(e) => setMySteamId(e.target.value)} 
+              placeholder="7656119..."
+            />
+          </div>
+
+          <div className="button-group">
+            <button className="add-user-btn" onClick={handleSaveAccount}>SAVE</button>
+            <button className="add-user-btn" onClick={handleClearAccount} style={{color: '#aaa'}}>CLEAR DATA</button>
+            <button className="add-user-btn" style={{marginTop: '10px'}} onClick={() => setActiveMenu('View')}>CANCEL</button>
+          </div>
+        </div>
+      );
+    }
+
+    // if ID exists, try to find user data
+    const myUser = users.find(u => u.steamid === mySteamId);
+
+    if (myUser) {
+      // showing large profile card
+      return (
+        <div className="account-large-card">
+          <div className="detail-header" style={{fontSize: '14px', padding:'8px'}}>
+            <span className="detail-title">{myUser.personaname}</span>
+            <span className="level-badge">{myUser.steam_level || '?'}</span>
+          </div>
+          
+          <div className="detail-content" style={{flexGrow:1}}>
+            <div className="detail-left" style={{width: '200px'}}>
+               <img 
+                  src={myUser.avatarfull} 
+                  alt={myUser.personaname}
+                  className="detail-image"
+                  style={{height: '200px', width: '200px'}}
+               />
+               <div className={getPersonaStateClass(myUser.personastate, myUser.gameextrainfo)} style={{fontSize:'12px', textAlign:'center', marginTop:'4px'}}>
+                 {getPersonaStateLabel(myUser.personastate, myUser.gameextrainfo)}
+               </div>
+            </div>
+
+            <div className="detail-right" style={{fontSize:'12px'}}>
+               <div style={{marginBottom:'12px'}}>
+                 <div style={{color:'#aaa', fontSize:'10px'}}>REAL NAME</div>
+                 <div>{myUser.realname || 'N/A'}</div>
+               </div>
+               
+               <div style={{marginBottom:'12px'}}>
+                 <div style={{color:'#aaa', fontSize:'10px'}}>LOCATION</div>
+                 <div>
+                   {myUser.loccountrycode ? `${myUser.loccountrycode}` : 'N/A'}
+                 </div>
+               </div>
+
+               <div style={{marginBottom:'12px'}}>
+                 <div style={{color:'#aaa', fontSize:'10px'}}>MEMBER SINCE</div>
+                 <div>{formatDate(myUser.timecreated)}</div>
+               </div>
+
+               <div style={{marginBottom:'12px'}}>
+                 <div style={{color:'#aaa', fontSize:'10px'}}>BAN STATUS</div>
+                 {myUser.bans ? (
+                   <div className="ban-stat">
+                     <span style={{color: myUser.bans.VACBanned ? '#ff4444' : '#95a92f'}}>
+                       {myUser.bans.VACBanned ? `VAC BANNED (${myUser.bans.NumberOfVACBans})` : 'NO VAC BANS'}
+                     </span>
+                     <br/>
+                     <span style={{color: myUser.bans.CommunityBanned ? '#ff4444' : '#95a92f'}}>
+                       {myUser.bans.CommunityBanned ? 'COMMUNITY BANNED' : 'GOOD STANDING'}
+                     </span>
+                     {myUser.bans.DaysSinceLastBan > 0 && (
+                        <div style={{fontSize:'10px', color:'#888', marginTop:'2px'}}>
+                          {myUser.bans.DaysSinceLastBan} days since last ban
+                        </div>
+                     )}
+                   </div>
+                 ) : <div>Loading...</div>}
+               </div>
+
+               <div style={{marginTop:'auto'}}>
+                 <button className="add-user-btn" onClick={() => setIsEditingAccount(true)}>EDIT SETTINGS</button>
+               </div>
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="user-card-base">
+          <div className="placeholder-box">Loading Profile...</div>
+          <button className="add-user-btn" onClick={() => setIsEditingAccount(true)}>EDIT SETTINGS</button>
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="steam-window">
       {/* Header */}
@@ -481,11 +606,15 @@ function App() {
           <div className="menu-items-container">
             <div className="menu-item" onClick={() => setActiveMenu('OpenValve')} style={{ textDecoration: activeMenu === 'OpenValve' ? 'underline' : 'none', color: activeMenu === 'OpenValve' ? '#fff' : '' }}>OpenValve</div>
             <div className="menu-item" onClick={() => setActiveMenu('View')} style={{ textDecoration: activeMenu === 'View' ? 'underline' : 'none', color: activeMenu === 'View' ? '#fff' : '' }}>View</div>
+            <div className="menu-item" onClick={() => setActiveMenu('Account')} style={{ textDecoration: activeMenu === 'Account' ? 'underline' : 'none', color: activeMenu === 'Account' ? '#fff' : '' }}>Account</div>
             <div className="menu-item" onClick={() => setActiveMenu('Help')} style={{ textDecoration: activeMenu === 'Help' ? 'underline' : 'none', color: activeMenu === 'Help' ? '#fff' : '' }}>Help</div>
           </div>
         </div>
         <div className="profile-placeholder">
-          <div className="account-name">{users.length > 0 ? `${users.length} Users Active` : 'No Users'}</div>
+          <div className="account-name">
+            {myUsername ? `${myUsername.toUpperCase()} | ` : ''}
+            {users.length > 0 ? `${users.length} Users Active` : 'No Users'}
+          </div>
           <div className="status-indicator">{loading ? 'Working...' : 'Online'}</div>
         </div>
       </div>
@@ -514,7 +643,6 @@ function App() {
                       <div className="library-header" style={{justifyContent: 'space-between', alignItems: 'center'}}>
                         <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                            <span>LIBRARY DISTRIBUTION:</span>
-                           {/* Dropdown Selector */}
                            <select 
                               value={graphSource} 
                               onChange={(e) => setGraphSource(e.target.value)}
@@ -707,7 +835,7 @@ function App() {
                       </div>
                     ))}
 
-                    {/* Add User Submission Box (Accepting Steam ID or vanityURL) */}
+                    {/* Add User Submission Box */}
                     <div className="user-card-base">
                       <form onSubmit={handleAddUser} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                         <div className="add-user-header">ADD USER</div>
@@ -729,7 +857,7 @@ function App() {
                 </div>
               )}
 
-              {/* User Detail Modal */}
+              {/* User Detail Modal (Active Tab Only) */}
               {selectedUser && (
                 <div className="modal-overlay" onClick={closeUserModal}>
                   <div className="user-detail-card" onClick={(e) => e.stopPropagation()}>
@@ -900,6 +1028,15 @@ function App() {
                   <button className="add-user-btn" style={{ marginTop: '20px' }} onClick={() => setActiveMenu('View')}>RETURN</button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Account Menu */}
+        {activeMenu === 'Account' && (
+          <div className="tab-subwindow-container">
+            <div className="content-subwindow" style={{ padding: '20px', alignItems: 'center', justifyContent: 'center' }}>
+              {renderAccountContent()}
             </div>
           </div>
         )}

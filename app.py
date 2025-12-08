@@ -46,36 +46,56 @@ def resolve_steam_identifier(input_id, api_key):
 def status():
     return jsonify({"status": "online", "backend": "Flask"}) # if the server sees this, it's online
 
-# 
+# returns information about a user, including their username, join date, location, among other things
 @app.route('/api/user', methods=['GET'])
 def get_user_summary():
-    raw_input = request.args.get('steamid') # could be a vanityURL or SteamID
+    raw_input = request.args.get('steamid') 
     api_key = os.getenv('STEAM_API_KEY')
     
     if not raw_input or not api_key:
         return jsonify({"error": "Missing params"}), 400
 
-    # try resolving the ID
-    # NOTE: resolve_steam_identifier will detect if it's already a SteamID, and just return it immediately.
     resolved_id = resolve_steam_identifier(raw_input, api_key)
     if not resolved_id:
         return jsonify({"error": "User not found or private"}), 404
 
     try:
-        # makes the API call
-        url = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
-        params = {'key': api_key, 'steamids': resolved_id}
+        # player summary
+        summary_url = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
+        summary_res = requests.get(summary_url, params={'key': api_key, 'steamids': resolved_id})
+        summary_res.raise_for_status()
+        summary_data = summary_res.json()
+        players = summary_data.get('response', {}).get('players', [])
         
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        # if the players field is there- there is a valid user summary
-        data = response.json()
-        players = data.get('response', {}).get('players', [])
-        
-        if players:
-            return jsonify(players[0])
-        else:
+        if not players:
             return jsonify({"error": "User not found"}), 404
+            
+        user_profile = players[0]
+
+        # player bans
+        try:
+            ban_url = "http://api.steampowered.com/ISteamUser/GetPlayerBans/v1/"
+            ban_res = requests.get(ban_url, params={'key': api_key, 'steamids': resolved_id})
+            ban_data = ban_res.json()
+            bans = ban_data.get('players', [])
+            if bans:
+                # Merge ban data into profile
+                user_profile['bans'] = bans[0]
+        except Exception as e:
+            print(f"Error fetching bans: {e}")
+            user_profile['bans'] = None
+
+        # steam level
+        try:
+            level_url = "http://api.steampowered.com/IPlayerService/GetSteamLevel/v1/"
+            level_res = requests.get(level_url, params={'key': api_key, 'steamid': resolved_id})
+            level_data = level_res.json()
+            user_profile['steam_level'] = level_data.get('response', {}).get('player_level', 'N/A')
+        except Exception as e:
+            print(f"Error fetching level: {e}")
+            user_profile['steam_level'] = '?'
+
+        return jsonify(user_profile)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
