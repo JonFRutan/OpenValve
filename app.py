@@ -228,6 +228,40 @@ def get_games():
             cur.close()
             conn.close()
             
+
+# executing SQL from the console
+# Includes sanitization to prevent injection or destructive commands
+@app.route('/api/console/sql', methods=['POST'])
+def execute_console_sql():
+    data = request.json
+    query = data.get('query', '').strip()
+    
+    if not query:
+        return jsonify({"error": "Empty query"}), 400
+
+    # allow select only
+    # disallow most commands and ';'
+    forbidden = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'GRANT', 'REVOKE', ';']
+    
+    if not query.upper().startswith('SELECT'):
+        return jsonify({"error": "Security Error: Only SELECT statements are allowed."}), 403
+
+    if any(bad_word in query.upper() for bad_word in forbidden):
+        return jsonify({"error": "Security Error: Destructive commands are blocked."}), 403
+
+    try:
+        conn = get_db_connection()
+        # RealDictCursor allows us to return JSON-ready dictionaries
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.route('/', methods=['GET'])
 def index():
     """Quick landing page for the API."""

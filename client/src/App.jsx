@@ -6,7 +6,6 @@ import {
 import './App.css';
 
 function App() {
-
   // active trackers for views and tabs
   const [activeMenu, setActiveMenu] = useState('View');
   const [activeTab, setActiveTab] = useState('User');
@@ -15,6 +14,7 @@ function App() {
   const [library, setLibrary] = useState([]);               
   const [rawUserGames, setRawUserGames] = useState({});     
   const [selectedGame, setSelectedGame] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
   
   const [steamIdInput, setSteamIdInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +22,7 @@ function App() {
   
   // graph States
   const [graphMode, setGraphMode] = useState('bar'); // bar, pie, radar
-  const [graphSource, setGraphSource] = useState('Tags'); // Tags, Genres, Categories
+  const [graphSource, setGraphSource] = useState('Tags'); // tags, genres, categories
 
   // console states
   const [consoleHistory, setConsoleHistory] = useState([
@@ -47,6 +47,27 @@ function App() {
     return new Date(timestamp * 1000).toLocaleDateString(undefined, {
       year: 'numeric', month: 'short', day: 'numeric'
     });
+  };
+
+  // Helper to interpret Steam's personastate integer
+  const getPersonaStateLabel = (stateCode, gameExtraInfo) => {
+    if (gameExtraInfo) return `Playing: ${gameExtraInfo}`;
+    switch(stateCode) {
+      case 0: return 'Offline';
+      case 1: return 'Online';
+      case 2: return 'Busy';
+      case 3: return 'Away';
+      case 4: return 'Snooze';
+      case 5: return 'Looking to Trade';
+      case 6: return 'Looking to Play';
+      default: return 'Online';
+    }
+  };
+
+  const getPersonaStateClass = (stateCode, gameExtraInfo) => {
+    if (gameExtraInfo) return 'user-status-ingame';
+    if (stateCode === 0) return 'user-status-offline';
+    return 'user-status-online';
   };
 
 // combines all the users libraries into one collection to be displayed on the 'Library' tab
@@ -239,6 +260,33 @@ function App() {
     }
   };
 
+  // helper for 'sql' command
+  const handleConsoleSQL = async (query) => {
+     setConsoleHistory(prev => [...prev, `Executing SQL: ${query}...`]);
+
+     try {
+        const res = await fetch('http://localhost:5000/api/console/sql', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ query: query })
+        });
+        
+        const data = await res.json();
+
+        if (res.ok) {
+           // Basic formatting for the resulting JSON list
+           const formatted = JSON.stringify(data, null, 2).split('\n');
+           const output = ["STATUS: SUCCESS [200 OK]", ...formatted];
+           setConsoleHistory(prev => [...prev, ...output]);
+        } else {
+           setConsoleHistory(prev => [...prev, `SQL ERROR: ${data.error}`]);
+        }
+
+     } catch (err) {
+        setConsoleHistory(prev => [...prev, `NETWORK ERROR: ${err.message}`]);
+     }
+  }
+
   // handles when the user clicks submit in the console
   const handleConsoleSubmit = async (e) => {
     e.preventDefault();
@@ -263,13 +311,22 @@ function App() {
           "----------------------",
           "help           : Displays this list of commands.",
           "search <appid> : Fetches game data from the DB by Steam App ID.",
-          "sql <query>    : [NOT IMPLEMENTED]",
+          "sql \"<query>\"  : Executes a read-only SQL query against the database.",
           "gpt <prompt>   : [NOT IMPLEMENTED]"
         ];
         break;
 
       case 'sql':
-        output = ["System.NotImplementedException: SQL engine offline."];
+        // use regex to capture content inside quotes
+        // sql "select * from games"
+        const match = input.match(/^sql\s+"([^"]+)"$/i);
+        if (!match) {
+            output = ["Usage: sql \"select * from games where price = 0\""];
+        } else {
+            // we return here because handleConsoleSQL is async and handles its own output
+            await handleConsoleSQL(match[1]);
+            return; 
+        }
         break;
 
       case 'gpt':
@@ -356,6 +413,15 @@ function App() {
 
   const closeGameModal = () => {
     setSelectedGame(null);
+  }
+  
+  // NEW: User Modal Handlers
+  const handleUserClick = (user) => {
+    setSelectedUser(user);
+  }
+
+  const closeUserModal = () => {
+    setSelectedUser(null);
   }
 
 
@@ -591,7 +657,7 @@ function App() {
                           <button className="add-user-btn" onClick={() => handleAddFriends(u.steamid)}>
                             ADD FRIENDS
                           </button>
-                          <button className="add-user-btn">
+                          <button className="add-user-btn" onClick={() => handleUserClick(u)}>
                             ACCOUNT DETAILS
                           </button>
                         </div>
@@ -617,6 +683,52 @@ function App() {
                       </form>
                     </div>
 
+                  </div>
+                </div>
+              )}
+
+              {/* User Detail Modal */}
+              {selectedUser && (
+                <div className="modal-overlay" onClick={closeUserModal}>
+                  <div className="user-detail-card" onClick={(e) => e.stopPropagation()}>
+                    <div className="detail-header">
+                      <span className="detail-title">{selectedUser.personaname}</span>
+                      <span className="close-x" onClick={closeUserModal}>X</span>
+                    </div>
+                    
+                    <div className="detail-content">
+                      <div className="detail-left">
+                         <img 
+                            src={selectedUser.avatarfull} 
+                            alt={selectedUser.personaname}
+                            className="detail-image"
+                         />
+                         <div className="detail-stats">
+                           <div><strong>Steam ID:</strong> {selectedUser.steamid}</div>
+                           <div><strong>Country:</strong> {selectedUser.loccountrycode || 'N/A'}</div>
+                           <div className={getPersonaStateClass(selectedUser.personastate, selectedUser.gameextrainfo)}>
+                             {getPersonaStateLabel(selectedUser.personastate, selectedUser.gameextrainfo)}
+                           </div>
+                         </div>
+                      </div>
+
+                      <div className="detail-right">
+                         <div className="detail-desc" style={{height: 'auto', maxHeight: '100px'}}>
+                           {selectedUser.realname ? (
+                              <div style={{marginBottom: '10px'}}><strong>Real Name:</strong> {selectedUser.realname}</div>
+                           ) : <div style={{marginBottom: '10px', fontStyle: 'italic', color: '#777'}}>No Real Name Public</div>}
+                           
+                           <div><strong>Joined:</strong> {formatDate(selectedUser.timecreated)}</div>
+                           <div><strong>Last Logoff:</strong> {formatDate(selectedUser.lastlogoff)}</div>
+                         </div>
+                         
+                         <div style={{marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                           <a href={selectedUser.profileurl} target="_blank" rel="noreferrer" className="add-user-btn" style={{textAlign: 'center', textDecoration: 'none'}}>
+                              OPEN STEAM PROFILE
+                           </a>
+                         </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

@@ -344,7 +344,7 @@ html,
   z-index: 1000;
 }
 
-.game-detail-card {
+.game-detail-card, .user-detail-card {
   width: 500px;
   background-color: var(--steam-olive-main);
   border-top: 1px solid var(--steam-light);
@@ -355,6 +355,10 @@ html,
   flex-direction: column;
   padding: 4px;
   box-shadow: 10px 10px 20px rgba(0,0,0,0.5);
+}
+
+.user-detail-card {
+  width: 400px; /* Users don't need as much width as games usually */
 }
 
 .detail-header {
@@ -442,6 +446,11 @@ html,
   border-top: 1px dashed #555;
   padding-top: 4px;
 }
+
+/* User Status Colors */
+.user-status-online { color: #57cbde; font-weight: bold; }
+.user-status-offline { color: #888; }
+.user-status-ingame { color: #90ba3c; font-weight: bold; }
 
 
 /* Existing css below... */
