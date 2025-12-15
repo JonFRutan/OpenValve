@@ -145,11 +145,11 @@ function App() {
 
     try {
       // get games
-      const gameRes = await fetch(`http://localhost:5000/api/games?steamid=${steamIdToFetch}`);
+      const gameRes = await fetch(`/api/games?steamid=${steamIdToFetch}`);
       if (!gameRes.ok) throw new Error(`User not found or Private Profile`);
       const gameData = await gameRes.json();
       // get profile
-      const userRes = await fetch(`http://localhost:5000/api/user?steamid=${steamIdToFetch}`);
+      const userRes = await fetch(`/api/user?steamid=${steamIdToFetch}`);
       if (!userRes.ok) throw new Error(`User profile fetch failed`);
       const userProfile = await userRes.json();
       // adding / updating a user
@@ -211,7 +211,7 @@ function App() {
   const handleAddFriends = async (steamid) => {
     try {
       console.log(`Fetching friends for ${steamid}...`);
-      const res = await fetch(`http://localhost:5000/api/friends?steamid=${steamid}`);
+      const res = await fetch(`/api/friends?steamid=${steamid}`);
       if (!res.ok) throw new Error("Could not fetch friends list");
       
       const friendsData = await res.json();
@@ -231,7 +231,7 @@ function App() {
         
         for (const friend of newFriends) {
           try {
-            const gameRes = await fetch(`http://localhost:5000/api/games?steamid=${friend.steamid}`);
+            const gameRes = await fetch(`/api/games?steamid=${friend.steamid}`);
             if (gameRes.ok) {
               const games = await gameRes.json();
               if (Array.isArray(games)) {
@@ -293,7 +293,7 @@ function App() {
   const handleConsoleSearch = async (appid) => {
     setConsoleHistory(prev => [...prev, `Searching database for AppID: ${appid}...`]);
     try {
-      const res = await fetch(`http://localhost:5000/api/games?appid=${appid}`);
+      const res = await fetch(`/api/games?appid=${appid}`);
       const data = await res.json();
 
       if (res.ok && data.length > 0) {
@@ -321,7 +321,7 @@ function App() {
   const handleConsoleSQL = async (query) => {
      setConsoleHistory(prev => [...prev, `Executing SQL: ${query}...`]); // filling up the console with the history of commands and output
      try {
-        const res = await fetch('http://localhost:5000/api/console/sql', {
+        const res = await fetch('/api/console/sql', {
            method: 'POST',
            headers: { 'Content-Type': 'application/json' },
            body: JSON.stringify({ query: query })
